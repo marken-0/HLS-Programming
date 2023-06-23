@@ -3,9 +3,9 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define dim 10
+#define len 64
 
 struct axis_data {
-    int data;
+    ap_int<8> data;
     ap_int<1> last;
 };
