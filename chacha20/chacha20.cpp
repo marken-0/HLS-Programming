@@ -87,22 +87,21 @@ void cc20_algo(hls::stream<axis_data> &input, hls::stream<axis_data> &output){
         for (int j = 0; j < 64; j++){
             cipher[i*64 + j] = keystream[j] ^ plaintext[i*64 + j];
         }
+        matrix[12]++;   
+    }
 
-        if (rem > 0){
-            chacha20_block(matrix, block);
-            for (int j = 0; j < 16; ++j) {
-                keystream[4 * j] = block[i] >> 24;
-                keystream[4 * j + 1] = block[i] >> 16;
-                keystream[4 * j + 2] = block[i] >> 8;
-                keystream[4 * j + 3] = block[i];
-            }
-
-            for (int j = 0; j < rem; j++){
-                cipher[i*64 + j] = keystream[j] ^ plaintext[i*64 + j];
-            }
+    if (rem != 0){
+        chacha20_block(matrix, block);
+        for (int j = 0; j < 16; ++j) {
+            keystream[4 * j] = block[i] >> 24;
+            keystream[4 * j + 1] = block[i] >> 16;
+            keystream[4 * j + 2] = block[i] >> 8;
+            keystream[4 * j + 3] = block[i];
         }
-        matrix[12]++;
-        
+
+        for (int j = 0; j < rem; j++){
+            cipher[i*64 + j] = keystream[j] ^ plaintext[i*64 + j];
+        }
     }
     //***************** Generating Cipher (End) *****************//
 
