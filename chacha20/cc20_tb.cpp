@@ -1,55 +1,95 @@
+#include "cc20.h" 
+#include <stdio.h>
 #include <stdint.h>
 
-#define leftShift(v, n) ( v<<n | v>>(32-n))
+void cc20_algo_sw(uint8_t key[32], uint8_t counter[4], uint8_t nonce[12], uint8_t plaintext[len]){
 
-#define quarterRound(x, a, b, c, d) \
-  x[a] += x[b]; x[d] = leftShift(x[d] ^ x[a], 16); \
-  x[c] += x[d]; x[b] = leftShift(x[b] ^ x[c], 12); \
-  x[a] += x[b]; x[d] = leftShift(x[d] ^ x[a], 8); \
-  x[c] += x[d]; x[b] = leftShift(x[b] ^ x[c], 7);
+    //***************** Initializing State Matrix (Start) *****************//
+    uint32_t matrix[16], block[16];
+    uint32_t constant[4] = {0x61707865, 0x3320646e, 0x79622d32, 0x6b206574}; //Constants given in the algorithm
 
-void chacha20_block(uint32_t state[16], uint32_t out[16]) {
-    int i;
-    for (i = 0; i < 16; ++i)
-        out[i] = state[i];
-    for (i = 0; i < 20; i += 2) {
-        quarterRound(out, 0, 4, 8, 12)
-        quarterRound(out, 1, 5, 9, 13)
-        quarterRound(out, 2, 6, 10, 14)
-        quarterRound(out, 3, 7, 11, 15)
-        quarterRound(out, 0, 5, 10, 15)
-        quarterRound(out, 1, 6, 11, 12)
-        quarterRound(out, 2, 7, 8, 13)
-        quarterRound(out, 3, 4, 9, 14)
+    matrix[0] = constant[0]; matrix[1] = constant[1]; matrix[2] = constant[2]; matrix[3] = constant[3]; // Constant
+
+    for (int i = 0; i < 8; i++){
+        matrix[4+i] = ((uint32_t)key[4*i] << 24) | ((uint32_t)key[4*i + 1] << 16) | ((uint32_t)key[4*i + 2] << 8) | ((uint32_t)key[4*i + 3]);
     }
-    for (i = 0; i < 16; ++i)
-        out[i] += state[i];
+
+    matrix[12] =  counter[3] << 24 | counter[2] << 16 | counter[1] << 8 | counter[0]; // Counter
+
+    for (int i = 0; i < 3; i++){
+        matrix[13+i] = ((uint32_t)nonce[4*i] << 24) | ((uint32_t)nonce[4*i + 1] << 16) | ((uint32_t)nonce[4*i + 2] << 8) | ((uint32_t)nonce[4*i + 3]);
+    }
+    //***************** Initializing State Matrix (End) *****************//
+
+    //***************** Generating Cipher (Start) *****************//
+    uint8_t cipher[len];
+    uint8_t keystream[64];
+    int num_blocks = len/64;
+    int rem = len%64;
+
+    for (int i = 0; i < num_blocks; i++){
+        chacha20_block(matrix, block);
+        for (int j = 0; j < 16; ++j) {
+            keystream[4 * j] = block[j] >> 24;
+            keystream[4 * j + 1] = block[j] >> 16;
+            keystream[4 * j + 2] = block[j] >> 8;
+            keystream[4 * j + 3] = block[j];
+        }
+
+        for (int j = 0; j < 64; j++){
+            cipher[i*64 + j] = keystream[j] ^ plaintext[i*64 + j];
+        }
+        matrix[12]++;
+        for (int i = 0; i < len; i++){
+                printf("%d", keystream[i]);
+        }
+    }
+    printf("\n");
+
+    if (rem != 0){
+        chacha20_block(matrix, block);
+        for (int j = 0; j < 16; ++j) {
+            keystream[4 * j] = block[j] >> 24;
+            keystream[4 * j + 1] = block[j] >> 16;
+            keystream[4 * j + 2] = block[j] >> 8;
+            keystream[4 * j + 3] = block[j];
+        }
+
+        for (int j = 0; j < rem; j++){
+            cipher[num_blocks*64 + j] = keystream[j] ^ plaintext[num_blocks*64 + j];
+        }
+    }
+    //***************** Generating Cipher (End) *****************//
+    for (int i = 0; i < len; i++){
+        printf("%d", cipher[i]);
+    }
 }
 
-void chacha20(uint8_t key[32], uint8_t nonce[12], uint32_t counter, uint8_t *plaintext, uint8_t *ciphertext, uint32_t len) {
-    uint32_t state[16], block[16], keystream[64];
-    int i, j;
 
-    state[0] = 0x61707865; state[1] = 0x3320646e; state[2] = 0x79622d32; state[3] = 0x6b206574;
-    for (i = 0; i < 8; ++i)
-        state[4 + i] = ((uint32_t)key[4 * i] << 24) | ((uint32_t)key[4 * i + 1] << 16) | ((uint32_t)key[4 * i + 2] << 8) | ((uint32_t)key[4 * i + 3]);
-    state[12] = counter;
-    for (i = 0; i < 3; ++i)
-        state[13 + i] = ((uint32_t)nonce[4 * i] << 24) | ((uint32_t)nonce[4 * i + 1] << 16) | ((uint32_t)nonce[4 * i + 2] << 8) | ((uint32_t)nonce[4 * i + 3]);
+int main(){
+    hls::stream<axis_data> input, output;
+    axis_data local_stream;
 
-    while (len > 0) {
-        chacha20_block(state, block);
-        for (i = 0; i < 16; ++i) {
-            keystream[4 * i] = block[i] >> 24;
-            keystream[4 * i + 1] = block[i] >> 16;
-            keystream[4 * i + 2] = block[i] >> 8;
-            keystream[4 * i + 3] = block[i];
-        }
-        for (i = 0; i < 64 && i < len; ++i)
-            ciphertext[i] = plaintext[i] ^ keystream[i];
-        len -= i;
-        plaintext += i;
-        ciphertext += i;
-        state[12]++;
-    }
+
+    uint8_t key1[32] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                          0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                          0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                          0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                          0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                          0x01};
+    uint8_t counter1[4] = {0x00, 0x00, 0x00, 0x01};
+    uint8_t nonce1[12] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02};
+    uint8_t plaintext1[64] = {0x41, 0x6e, 0x79, 0x20, 0x73, 0x75,
+                                0x62, 0x6d, 0x69, 0x73, 0x73, 0x69,
+                                0x6f, 0x6e, 0x20, 0x74, 0x6f, 0x20,
+                                0x74, 0x68, 0x65, 0x20, 0x49, 0x45,
+                                0x54, 0x46, 0x20, 0x69, 0x6e, 0x74,
+                                0x65, 0x6e, 0x64, 0x65, 0x64, 0x20,
+                                0x62, 0x79, 0x20, 0x74, 0x68, 0x65,
+                                0x20, 0x43, 0x6f, 0x6e, 0x74, 0x72,
+                                0x69, 0x62, 0x75, 0x74, 0x6f, 0x72,
+                                0x20, 0x66, 0x6f, 0x72, 0x20, 0x70,
+                                0x75, 0x62, 0x6c, 0x69};
+
+    cc20_algo_sw(key1, counter1, nonce1, plaintext1);
 }
