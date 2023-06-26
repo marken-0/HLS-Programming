@@ -1,27 +1,20 @@
-#include "header.h"
+#include "cc20.h"
 
-#define leftShift(v, n) ( v<<n | v>>(32-n))
-
-#define quarterRound(x, a, b, c, d) \
-  x[a] += x[b]; x[d] = leftShift(x[d] ^ x[a], 16); \
-  x[c] += x[d]; x[b] = leftShift(x[b] ^ x[c], 12); \
-  x[a] += x[b]; x[d] = leftShift(x[d] ^ x[a], 8); \
-  x[c] += x[d]; x[b] = leftShift(x[b] ^ x[c], 7);
-
-void chacha20_block(uint32_t state[16], uint32_t out[16]) {
+void chacha20_block(ap_int<32> state[16], ap_int<32> out[16]) {
     for (int i = 0; i < 16; ++i) out[i] = state[i];
     for (int i = 0; i < 10; i ++) {
-        quarterRound(out, 0, 4, 8, 12)
-        quarterRound(out, 1, 5, 9, 13)
-        quarterRound(out, 2, 6, 10, 14)
-        quarterRound(out, 3, 7, 11, 15)
-        quarterRound(out, 0, 5, 10, 15)
-        quarterRound(out, 1, 6, 11, 12)
-        quarterRound(out, 2, 7, 8, 13)
-        quarterRound(out, 3, 4, 9, 14)
+        quarterRound(out, 0, 4, 8, 12) // @suppress("Suggested parenthesis around expression")
+        quarterRound(out, 1, 5, 9, 13) // @suppress("Suggested parenthesis around expression")
+        quarterRound(out, 2, 6, 10, 14) // @suppress("Suggested parenthesis around expression")
+        quarterRound(out, 3, 7, 11, 15) // @suppress("Suggested parenthesis around expression")
+        quarterRound(out, 0, 5, 10, 15) // @suppress("Suggested parenthesis around expression")
+        quarterRound(out, 1, 6, 11, 12) // @suppress("Suggested parenthesis around expression")
+        quarterRound(out, 2, 7, 8, 13) // @suppress("Suggested parenthesis around expression")
+        quarterRound(out, 3, 4, 9, 14) // @suppress("Suggested parenthesis around expression")
     }
-    for (i = 0; i < 16; ++i) out[i] += state[i];
+    for (int i = 0; i < 16; ++i) out[i] += state[i];
 }
+
 void cc20_algo(hls::stream<axis_data> &input, hls::stream<axis_data> &output){
     //***************** Reading Input from Stream (Start) *****************//
     ap_int<8> key[32];
@@ -53,7 +46,7 @@ void cc20_algo(hls::stream<axis_data> &input, hls::stream<axis_data> &output){
     //***************** Reading Input from Stream (End) *****************//
 
     //***************** Initializing State Matrix (Start) *****************//
-    ap_int<32> matrix[16], block[16]
+    ap_int<32> matrix[16], block[16];
     ap_int<32> constant[4] = {0x61707865, 0x3320646e, 0x79622d32, 0x6b206574}; //Constants given in the algorithm
 
     matrix[0] = constant[0]; matrix[1] = constant[1]; matrix[2] = constant[2]; matrix[3] = constant[3]; // Constant
@@ -63,7 +56,7 @@ void cc20_algo(hls::stream<axis_data> &input, hls::stream<axis_data> &output){
     }
 
     matrix[12] =  counter[3] << 24 | counter[2] << 16 | counter[1] << 8 | counter[0]; // Counter
-    
+
     for (int i = 0; i < 3; i++){
         matrix[13+i] = ((ap_int<32>)nonce[4*i] << 24) | ((ap_int<32>)nonce[4*i + 1] << 16) | ((ap_int<32>)nonce[4*i + 2] << 8) | ((ap_int<32>)nonce[4*i + 3]);
     }
@@ -78,37 +71,41 @@ void cc20_algo(hls::stream<axis_data> &input, hls::stream<axis_data> &output){
     for (int i = 0; i < num_blocks; i++){
         chacha20_block(matrix, block);
         for (int j = 0; j < 16; ++j) {
-            keystream[4 * j] = block[i] >> 24;
-            keystream[4 * j + 1] = block[i] >> 16;
-            keystream[4 * j + 2] = block[i] >> 8;
-            keystream[4 * j + 3] = block[i];
+            keystream[4 * j] = block[j] >> 24;
+            keystream[4 * j + 1] = block[j] >> 16;
+            keystream[4 * j + 2] = block[j] >> 8;
+            keystream[4 * j + 3] = block[j];
         }
 
         for (int j = 0; j < 64; j++){
             cipher[i*64 + j] = keystream[j] ^ plaintext[i*64 + j];
         }
-        matrix[12]++;   
+        matrix[12]++;
     }
 
     if (rem != 0){
         chacha20_block(matrix, block);
         for (int j = 0; j < 16; ++j) {
-            keystream[4 * j] = block[i] >> 24;
-            keystream[4 * j + 1] = block[i] >> 16;
-            keystream[4 * j + 2] = block[i] >> 8;
-            keystream[4 * j + 3] = block[i];
+            keystream[4 * j] = block[j] >> 24;
+            keystream[4 * j + 1] = block[j] >> 16;
+            keystream[4 * j + 2] = block[j] >> 8;
+            keystream[4 * j + 3] = block[j];
         }
 
         for (int j = 0; j < rem; j++){
-            cipher[i*64 + j] = keystream[j] ^ plaintext[i*64 + j];
+            cipher[num_blocks*64 + j] = keystream[j] ^ plaintext[num_blocks*64 + j];
         }
     }
     //***************** Generating Cipher (End) *****************//
 
     //***************** Writing Output to Stream (Start) *****************//
+    axis_data local_write;
     for (int i = 0; i < len; i++){
-        local_stream.data = cipher[i];
-        i == len - 1 ? local_stream.last = 1 : local_stream.last = 0;
-        output.write(local_stream);
+    	local_write.data = cipher[i];
+        if (i == len-1){
+        	local_write.last = 1;
+        }
+        else local_write.last = 0;
+        output.write(local_write);
     }
 }
