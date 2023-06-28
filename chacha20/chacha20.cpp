@@ -1,26 +1,11 @@
 #include "cc20.h"
 
-void chacha20_block(ap_int<32> state[16], ap_int<32> out[16]) {
-    for (int i = 0; i < 16; ++i) out[i] = state[i];
-    for (int i = 0; i < 10; i ++) {
-        quarterRound(out, 0, 4, 8, 12) // @suppress("Suggested parenthesis around expression")
-        quarterRound(out, 1, 5, 9, 13) // @suppress("Suggested parenthesis around expression")
-        quarterRound(out, 2, 6, 10, 14) // @suppress("Suggested parenthesis around expression")
-        quarterRound(out, 3, 7, 11, 15) // @suppress("Suggested parenthesis around expression")
-        quarterRound(out, 0, 5, 10, 15) // @suppress("Suggested parenthesis around expression")
-        quarterRound(out, 1, 6, 11, 12) // @suppress("Suggested parenthesis around expression")
-        quarterRound(out, 2, 7, 8, 13) // @suppress("Suggested parenthesis around expression")
-        quarterRound(out, 3, 4, 9, 14) // @suppress("Suggested parenthesis around expression")
-    }
-    for (int i = 0; i < 16; ++i) out[i] += state[i];
-}
-
 void cc20_algo(hls::stream<axis_data> &input, hls::stream<axis_data> &output){
     //***************** Reading Input from Stream (Start) *****************//
-    ap_int<8> key[32];
-    ap_int<8> counter[4];
-    ap_int<8> nonce[12];
-    ap_int<8> plaintext[len];
+    uint8_t key[32];
+    uint8_t counter[4];
+    uint8_t nonce[12];
+    uint8_t plaintext[len];
 
     axis_data local_stream;
 
@@ -46,25 +31,25 @@ void cc20_algo(hls::stream<axis_data> &input, hls::stream<axis_data> &output){
     //***************** Reading Input from Stream (End) *****************//
 
     //***************** Initializing State Matrix (Start) *****************//
-    ap_int<32> matrix[16], block[16];
-    ap_int<32> constant[4] = {0x61707865, 0x3320646e, 0x79622d32, 0x6b206574}; //Constants given in the algorithm
+    uint32_t matrix[16], block[16];
+    uint32_t constant[4] = {0x61707865, 0x3320646e, 0x79622d32, 0x6b206574}; //Constants given in the algorithm
 
     matrix[0] = constant[0]; matrix[1] = constant[1]; matrix[2] = constant[2]; matrix[3] = constant[3]; // Constant
 
     for (int i = 0; i < 8; i++){
-        matrix[4+i] = ((ap_int<32>)key[4*i] << 24) | ((ap_int<32>)key[4*i + 1] << 16) | ((ap_int<32>)key[4*i + 2] << 8) | ((ap_int<32>)key[4*i + 3]);
+        matrix[4+i] = ((uint32_t)key[4*i] << 24) | ((uint32_t)key[4*i + 1] << 16) | ((uint32_t)key[4*i + 2] << 8) | ((uint32_t)key[4*i + 3]);
     }
 
     matrix[12] =  counter[3] << 24 | counter[2] << 16 | counter[1] << 8 | counter[0]; // Counter
 
     for (int i = 0; i < 3; i++){
-        matrix[13+i] = ((ap_int<32>)nonce[4*i] << 24) | ((ap_int<32>)nonce[4*i + 1] << 16) | ((ap_int<32>)nonce[4*i + 2] << 8) | ((ap_int<32>)nonce[4*i + 3]);
+        matrix[13+i] = ((uint32_t)nonce[4*i] << 24) | ((uint32_t)nonce[4*i + 1] << 16) | ((uint32_t)nonce[4*i + 2] << 8) | ((uint32_t)nonce[4*i + 3]);
     }
     //***************** Initializing State Matrix (End) *****************//
 
     //***************** Generating Cipher (Start) *****************//
-    ap_int<8> cipher[len];
-    ap_int<8> keystream[64];
+    uint8_t cipher[len];
+    uint8_t keystream[64];
     int num_blocks = len/64;
     int rem = len%64;
 
